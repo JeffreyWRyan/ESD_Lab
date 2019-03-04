@@ -26,7 +26,7 @@ type soft_ram is array (1 downto 0) of std_logic_vector(31 downto 0);
 signal s_ram                 :   soft_ram;
 
 signal s_write_data          :   std_logic_vector(31 downto 0);
-signal s_address             :   std_logic;
+signal s_address             :   std_logic_vector(1 downto 0);
 signal s_we                  :   std_logic;
 signal s_minimum_pwm         :   unsigned(31 downto 0);
 signal s_maximum_pwm         :   unsigned(31 downto 0);
@@ -49,12 +49,12 @@ SYNCH_INC_SIGNALS   :   process(I_CLK_50, I_CLK_50_RSI_N)
 begin
     if (I_CLK_50_RSI_N = '0') then
         s_write_data    <= (others => '0');
-        s_address       <= '0';
+        s_address       <= (others => '0');
         s_we            <= '0';
     
     elsif (rising_edge(I_CLK_50)) then
         s_write_data    <= I_WRITE_DATA;
-        s_address       <= I_ADDRESS;
+        s_address       <= '0' & I_ADDRESS;
         s_we            <= I_WE;
     end if;
 end process SYNCH_INC_SIGNALS;
@@ -75,11 +75,12 @@ end process IRQ_CONTROL;
 O_IRQ               <= s_irq;
 ----------------------------------------------------------------------------------------------------
 WRITE_TO_RAM    :   process(I_CLK_50, I_CLK_50_RSI_N)
+	constant C_DEFAULT_MIN	:	unsigned(31 downto 0) := to_unsigned(5, 32);
+	constant C_DEFAULT_MAX	:	unsigned(31 downto 0) := to_unsigned(15, 32);
 begin
     if(I_CLK_50_RSI_N = '0') then
-        s_ram                                       <= (others => '0');
-        s_minimum_pwm                               <= 0x0000C350;
-        s_maximum_pwm                               <= 0x000186A0;
+        s_ram(0)                                       <= std_logic_vector(C_DEFAULT_MIN);
+        s_ram(1)                                       <= std_logic_vector(C_DEFAULT_MAX);
         
     elsif (rising_edge(I_CLK_50)) then
         if (s_we = '1') then
@@ -87,12 +88,12 @@ begin
         end if;
     end if;
 end process WRITE_TO_RAM;
--- Asynchronously pass the minimum and maximum values into their appropirate vectors
-s_minimum_pwm <= to_unsigned(s_ram(0));
-s_maximum_pwm <= to_unsigned(s_ram(1));
+-- Asynchronously pass the minimum and maximum values into their appropriate vectors
+s_minimum_pwm <= unsigned(s_ram(0));
+s_maximum_pwm <= unsigned(s_ram(1));
 ----------------------------------------------------------------------------------------------------
 PWM_TIMING  :   process(I_CLK_50, I_CLK_50_RSI_N)
-    constant C_20MS_PERIOD : unsigned(31 downto 0) := to_unsigned(1000000, 32); --50MHZ clock = 20ns period.  20ns * 1,000,000 = 20ms.
+    constant C_20MS_PERIOD : unsigned(31 downto 0) := to_unsigned(30, 32); --50MHZ clock = 20ns period.  20ns * 1,000,000 = 20ms.
 begin
     if (I_CLK_50_RSI_N = '0') then
         s_pwm_count     <= (others => '1');
@@ -108,7 +109,7 @@ end process PWM_TIMING;
 ----------------------------------------------------------------------------------------------------
 --100ms strobe.  The strobe dictates when the s_current_pwm signal increments or decrements.
 STROBE_100MS    :   process(I_CLK_50, I_CLK_50_RSI_N)
-    constant C_100MS    :   unsigned(31 downto 0) := to_unsigned(5000000, 32) --50MHz clock = 20ns period.  20ns * 5,000,000 = 100ms
+    constant C_100MS    :   unsigned(31 downto 0) := to_unsigned(30, 32); --50MHz clock = 20ns period.  20ns * 5,000,000 = 100ms
 begin
     if (I_CLK_50_RSI_N = '0') then
         s_100ms_strobe_timing       <= (others => '0');
@@ -128,18 +129,19 @@ end process STROBE_100MS;
 --s_arm_direction = '1' then move min to max
 --s_arm_direction = '0' then move max to min
 PULSE_WIDTH_MODULATOR   :   process(I_CLK_50, I_CLK_50_RSI_N)
+	constant C_DEFAULT_PWM	:	unsigned(31 downto 0) := to_unsigned(6, 32);
 begin
     if (I_CLK_50_RSI_N = '0') then
-        s_current_pwm       <= s_minimum_pwm;
+        s_current_pwm       <= C_DEFAULT_PWM;
         s_arm_direction     <= '1';
         
     elsif (rising_edge(I_CLK_50)) then
         if (s_arm_direction = '1') then
             if (s_current_pwm = unsigned(s_maximum_pwm)) then
-                s_current_pwm   <= s_current_pwm - 50;
+                s_current_pwm   <= s_current_pwm - 1;
                 s_arm_direction <= '0';
             elsif (s_100ms_strobe = '1') then
-                s_current_pwm   <= s_current_pwm + 50;
+                s_current_pwm   <= s_current_pwm + 1;
                 s_arm_direction <= s_arm_direction;                
             else
                 s_current_pwm   <= s_current_pwm;
@@ -147,14 +149,14 @@ begin
             end if;
         else
             if (s_current_pwm = unsigned(s_minimum_pwm)) then
-                s_current_pwm   <= s_current_pwm + 50;
+                s_current_pwm   <= s_current_pwm + 1;
                 s_arm_direction <= '1';
             elsif (s_100ms_strobe = '1') then
-                s_current_pwm   <= s_current_pwm - 50;
-                s_arm_direction s_arm_direction;                
+                s_current_pwm   <= s_current_pwm - 1;
+                s_arm_direction <= s_arm_direction;                
             else
                 s_current_pwm   <= s_current_pwm;
-                s_arm_direction s_arm_direction;
+                s_arm_direction <= s_arm_direction;
             end if;
         end if;
     end if;
@@ -175,3 +177,4 @@ begin
 end process PWM_OUTPUT;
 O_PWM                      <= s_pwm_out;
 ----------------------------------------------------------------------------------------------------
+end architecture rtl;

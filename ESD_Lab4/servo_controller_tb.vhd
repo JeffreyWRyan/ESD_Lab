@@ -10,7 +10,7 @@ architecture test_bench of servo_controller_tb is
 component servo_controller
   port(
     I_CLK_50      :  in std_logic;
-    I_CLK_50_RSI  :  in std_logic;
+    I_CLK_50_RSI_N:  in std_logic;
     
     I_WE          :  in std_logic;
     I_WRITE_DATA  :  in std_logic_vector(31 downto 0);
@@ -36,7 +36,7 @@ begin
 UUT : servo_controller
   port map(
     I_CLK_50      => s_clk_50,
-    I_CLK_50_RSI  => s_clk_50_rsi,
+    I_CLK_50_RSI_N=> s_clk_50_rsi,
     
     I_WE          => s_we,
     I_WRITE_DATA  => s_write_data,
@@ -56,11 +56,11 @@ end process CLOCKING_AND_RESET;
 
 IRQ_PROC  : process
 begin 
-  wait for s_irq = '1';
+  wait until s_irq = '1';
   s_address    <= '0';
   s_write_data <= (others => '0');
-  s_we         <= '1'
-  wait for s_irq = '0';
+  s_we         <= '1';
+  wait until s_irq = '0';
   s_we         <= '0';
 end process IRQ_PROC;
 end architecture test_bench;
